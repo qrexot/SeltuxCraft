@@ -1,0 +1,2 @@
+fee7d59da771ef1ab5aea7e7a82e2649641367862bd679e2b50c97018d5bb13a  SeltuxCraft.zip
+356f9620ef96f4feb5fa29baec9aed0ea93bcaddf3a26fbf76a2f41e9ed864ba  SeltuxCraft-Source.zip

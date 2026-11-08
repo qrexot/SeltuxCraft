@@ -1,0 +1,106 @@
+name: Windows release
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: windows-release-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      commit: ${{ steps.source.outputs.commit }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Import uploaded sources on first run
+        id: source
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          if [ -f .github/source-import.json ]; then
+            python3 - <<'PYTHON'
+          import base64, hashlib, io, json, os, tarfile, urllib.request
+          from pathlib import Path
+          manifest = json.loads(Path('.github/source-import.json').read_text())
+          data = bytearray()
+          for sha in manifest['blobs']:
+              req = urllib.request.Request(f"https://api.github.com/repos/{os.environ['GH_REPO']}/git/blobs/{sha}", headers={'Authorization': 'Bearer ' + os.environ['GH_TOKEN'], 'Accept': 'application/vnd.github+json'})
+              with urllib.request.urlopen(req, timeout=90) as response:
+                  data.extend(base64.b64decode(json.load(response)['content']))
+          assert hashlib.sha256(data).hexdigest() == manifest['sha256'], 'Source transfer checksum mismatch'
+          with tarfile.open(fileobj=io.BytesIO(data), mode='r:xz') as archive:
+              members = [m for m in archive.getmembers() if m.name.split('/')[0] != '.github']
+              archive.extractall('.', members=members, filter='data')
+          Path('.github/source-import.json').unlink()
+          PYTHON
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git add .
+            python3 tools/check_public_tree.py
+            git commit -m 'Import Seltuks launcher sources and documentation' -m 'Co-Authored-By: OpenAI Codex <noreply@openai.com>'
+            git push origin HEAD:main
+          fi
+          echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+  windows:
+    needs: prepare
+    runs-on: windows-latest
+    timeout-minutes: 90
+    permissions:
+      contents: write
+    env:
+      RUSTFLAGS: --cfg seltuks_distribution
+      HORIZON_MSA_CLIENT_ID: ${{ vars.HORIZON_MSA_CLIENT_ID }}
+      HORIZON_LAUNCHER_VERSION: 0.2.0
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.commit }}
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: launcher
+      - name: Build Windows x64
+        run: cargo build --release --locked --manifest-path launcher/Cargo.toml
+      - name: Check executable
+        run: python tools/check_pe_arch.py x64 launcher/target/release/horizon-launcher.exe
+      - name: Package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist, package | Out-Null
+          Copy-Item launcher/target/release/horizon-launcher.exe dist/Seltuks-Launcher.exe
+          Copy-Item launcher/target/release/horizon-launcher.exe dist/seltuks-launcher-setup-x64.exe
+          Copy-Item dist/Seltuks-Launcher.exe package/
+          Copy-Item LICENSE, THIRD_PARTY_NOTICES.md, README.md package/
+          Compress-Archive -Path package/* -DestinationPath dist/Seltuks-Launcher-windows-x64.zip
+          Get-ChildItem dist -File | ForEach-Object { "$((Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower())  $($_.Name)" } | Set-Content dist/SHA256SUMS -Encoding ascii
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Seltuks-Launcher-windows-x64
+          path: dist/*
+          if-no-files-found: error
+      - name: Publish release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "build-${{ github.run_number }}-${{ github.run_attempt }}"
+          $notes = @"
+          Seltuks Launcher для Windows x64.
+          Автор Seltuks: Леонард — https://t.me/Seltux
+          Основа: Horizon (MIT), авторство и лицензии сохранены.
+
+          Seltuks-Launcher.exe — портативный запуск.
+          seltuks-launcher-setup-x64.exe — установщик.
+          SHA256SUMS — контрольные суммы загрузок.
+          Исходный коммит: ${{ needs.prepare.outputs.commit }}
+          "@
+          $notes | Set-Content release-notes.md -Encoding utf8
+          gh release create $tag dist/* --target '${{ needs.prepare.outputs.commit }}' --title "Seltuks Launcher 0.2.0 · $tag" --notes-file release-notes.md --latest
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

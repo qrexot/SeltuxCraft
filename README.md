@@ -5,9 +5,11 @@
 
 Лаунчер **Seltuks** для Windows. Автор версии Seltuks, оформления и доработок: **Леонард — [@Seltux](https://t.me/Seltux)**.
 
+**Статус:** оформление и автоматическая сборка подготовлены. Публикация исходников и первого EXE-релиза ещё не завершена.
+
 ## Скачать
 
-Готовые файлы находятся в [Releases](https://github.com/qrexot/SeltuxCraft/releases/latest):
+После успешной сборки готовые файлы появятся в [Releases](https://github.com/qrexot/SeltuxCraft/releases/latest):
 
 - `Seltuks-Launcher.exe` — портативный запуск.
 - `seltuks-launcher-setup-x64.exe` — установка для текущего пользователя.
@@ -33,7 +35,7 @@ cargo build --release --locked --manifest-path launcher/Cargo.toml
 
 ## Исходники и авторство
 
-`launcher/` — лаунчер; `crates/` — библиотеки и игровая основа; `tools/` — инструменты; `docs/` — документация.
+`launcher/` — полный исходный код лаунчера; `crates/` — только 15 локальных библиотек, прямо указанных в `launcher/Cargo.toml`; `packaging/` — иконки; `tools/` — проверка EXE. Машинные отчёты бенчмарков и отдельный игровой клиент не публикуются.
 
 Seltuks основан на **Horizon** (Ludovic Marie и участники Horizon), лицензия MIT. Авторство исходной основы и сторонние уведомления сохранены в [LICENSE](LICENSE) и [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). [Документация основы](docs/HORIZON_UPSTREAM_README.md).
 
